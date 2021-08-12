@@ -10,28 +10,24 @@ const band_requester_privkey = PrivateKey.fromMnemonic("oatoat");
 const band_requester_pubkey = band_requester_privkey.toPubkey();
 const band_requester_address = band_requester_pubkey.toAddress();
 
-const symbols = ["LUNA", "ANC", "MIR", "ADA","BNB","DOT","LINA","LINK","UNI","XRP","YFI"];
+const symbols = ["DAI", "ATOM"];
+const dataObi = new Obi(`{symbols:[string],multiplier:u64}/{rates:[u64]}`);
+const priceKP = new anchor.web3.PublicKey("Et9fyguUdZ3jPPPy9nEewcKTK8An7ivyVtyJP7jRuhgV");
 
 const sleep = async (ms) => new Promise((r) => setTimeout(r, ms));
 
 const encodeCalldata = (symbols, multiplier) => {
-    const calldataObi = new Obi(
-        `{symbols:[string],multiplier:u64}/{rates:[u64]}`
-    );
     const transformToObiStruct = {
         symbols: symbols,
         multiplier: multiplier,
     };
-    return calldataObi
+    return dataObi
         .encodeInput(transformToObiStruct)
         .toString("hex");
 };
 
 const decodeResult = (encoded) => {
-    const resultObi = new Obi(
-        `{symbols:[string],multiplier:u64}/{rates:[u64]}`
-    );
-    return resultObi.decodeOutput(encoded);
+    return dataObi.decodeOutput(encoded);
 }
 
 const requestDataAndGetResult = async () => {
@@ -54,6 +50,9 @@ const requestDataAndGetResult = async () => {
                     4,
                     "FromBandChainJSAndSolanaAnchor",
                     band_requester_address.toAccBech32(),
+                    [],
+                    100000,
+                    3000000,
                 ).toAny()
             )
             .withAccountNum(band_account.accountNumber)
@@ -67,10 +66,10 @@ const requestDataAndGetResult = async () => {
         const txRawBytes = tx.getTxData(signature, band_requester_pubkey)
 
         const txResult = await bandchain.sendTxBlockMode(txRawBytes);
-        console.log("txHash:", txResult.txhash);
+        console.log("BandChain TX Hash:", txResult.txhash);
 
         const [requestID] = await bandchain.getRequestIdByTxHash(txResult.txhash);
-        console.log("Request ID:", requestID);
+        console.log("BandChain Request ID:", requestID);
 
         let result;
         let max_retry = 10;
@@ -134,7 +133,6 @@ describe('solana-anchor-std-reference', () => {
         const result = await requestDataAndGetResult();
         const decodedResult = decodeResult(Buffer.from(result.result, 'base64'));
         let data = [];
-        console.log(result, decodedResult);
         for (let i=0; i<symbols.length; i++) {
             const symbolArray = [...new Buffer.from(symbols[i], "ascii")];
             symbolArray.push(...Array.apply(null, new Array(8-symbols[i].length)).map(Number.prototype.valueOf,0));
@@ -148,10 +146,8 @@ describe('solana-anchor-std-reference', () => {
                 requestId: requestId,
             });
         }
-        console.log(data);
 
         const program = anchor.workspace.StdReferenceBasic;
-        const priceKP = new anchor.web3.PublicKey("Et9fyguUdZ3jPPPy9nEewcKTK8An7ivyVtyJP7jRuhgV");
 
         const tx = await program.rpc.relay(
             data,
@@ -164,17 +160,59 @@ describe('solana-anchor-std-reference', () => {
             }
         );
 
-        console.log("TX hash: ", tx);
+        console.log("Solana TX Hash:", tx);
     })
 
     it('Query', async () => {
         const program = anchor.workspace.StdReferenceBasic;
-        const priceKP = new anchor.web3.PublicKey("Et9fyguUdZ3jPPPy9nEewcKTK8An7ivyVtyJP7jRuhgV");
         const result = await program.account.priceKeeper.fetch(priceKP);
         const size = result.currentSize;
         for (let i=0; i<size; i++) {
             let price = result.prices[i];
             console.log(String.fromCharCode.apply(null, price.symbol), price.rate.toNumber()/1000000, price.lastUpdated.toNumber(), price.requestId.toNumber())
         }
+    })
+
+    it('Remove', async () => {
+        const program = anchor.workspace.StdReferenceBasic;
+        const symbols = ["KAI", "OGN", "WRX"];
+        let data = [];
+        for (let i=0; i<symbols.length; i++) {
+            const symbolArray = [...new Buffer.from(symbols[i], "ascii")];
+            symbolArray.push(...Array.apply(null, new Array(8-symbols[i].length)).map(Number.prototype.valueOf,0));
+            data.push(symbolArray);
+        }
+        const tx = await program.rpc.remove(
+            data,
+            {
+                accounts: {
+                    priceKeeper: priceKP,
+                    authority: ownAccount.publicKey,
+                },
+                signers: [ownAccount],
+            }
+        )
+
+        console.log("Solana TX Hash:", tx);
+    })
+
+    it('Transfer', async () => {
+        const program = anchor.workspace.StdReferenceBasic;
+        const result = await program.account.priceKeeper.fetch(priceKP);
+        console.log("Current owner:", result.authority.toBase58());
+        const testAccount = anchor.web3.Keypair.fromSecretKey(new Uint8Array([252,101,88,20,83,209,171,0,101,132,175,33,196,254,80,102,204,113,236,236,219,138,36,119,37,207,66,130,229,147,131,167,104,36,49,205,204,190,176,146,249,195,127,246,252,23,89,202,81,184,95,194,131,9,82,40,28,75,11,33,242,248,110,245]))
+        const tx = await program.rpc.transferOwnership(
+            testAccount.publicKey,
+            {
+                accounts: {
+                    priceKeeper: priceKP,
+                    authority: ownAccount.publicKey,
+                },
+                signers: [ownAccount],
+            }
+        )
+        console.log("Solana TX Hash:", tx);
+        const new_result = await program.account.priceKeeper.fetch(priceKP);
+        console.log("New owner:", new_result.authority.toBase58());
     })
 });
