@@ -10,9 +10,31 @@ const band_requester_privkey = PrivateKey.fromMnemonic("oatoat");
 const band_requester_pubkey = band_requester_privkey.toPubkey();
 const band_requester_address = band_requester_pubkey.toAddress();
 
-const symbols = ["DAI", "ATOM"];
+const symbols = ["BAND", "ALPHA", "MATIC", "LUNA", "ANC", "MIR", "ETH", "BTC", "DOGE", "DOT", "BCH", "XRP", "XLM", "BNB",
+                 "SOL", "USDT", "UST"];
+    // "BZRX",
+    // "SRM",
+    // "SNT",
+    // "SOL",
+    // "CKB",
+    // "BNT",
+    // "CRV",
+    // "MANA",
+    // "KAVA",
+    // "MATIC",
+    // "TRB",
+    // "REP",
+    // "FTM",
+    // "TOMO",
+    // "ONE",
+    // "WNXM",
+    // "PAXG",
+    // "WAN",
+    // "SUSD",
+    // "RLC"];
 const dataObi = new Obi(`{symbols:[string],multiplier:u64}/{rates:[u64]}`);
-const priceKP = new anchor.web3.PublicKey("Et9fyguUdZ3jPPPy9nEewcKTK8An7ivyVtyJP7jRuhgV");
+const priceKP = new anchor.web3.PublicKey("2CEyCps4YgurP4XCnr8QLQosz7fS1JdhxVfmoPdHg6HW");
+const priceKeeper = anchor.web3.Keypair.generate();
 
 const sleep = async (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -46,13 +68,13 @@ const requestDataAndGetResult = async () => {
                 new MsgRequestData(
                     oracle_script_id,
                     Buffer.from(calldata, "hex"),
-                    4,
-                    4,
+                    1,
+                    1,
                     "FromBandChainJSAndSolanaAnchor",
                     band_requester_address.toAccBech32(),
                     [],
-                    100000,
-                    3000000,
+                    500000,
+                    1000000,
                 ).toAny()
             )
             .withAccountNum(band_account.accountNumber)
@@ -72,7 +94,7 @@ const requestDataAndGetResult = async () => {
         console.log("BandChain Request ID:", requestID);
 
         let result;
-        let max_retry = 10;
+        let max_retry = 15;
         while (max_retry > 0) {
             max_retry--;
             try {
@@ -101,15 +123,32 @@ const requestDataAndGetResult = async () => {
     }
 };
 
+const randomNumberFromInterval = (min, max) => {
+    return Math.floor(Math.random() * (max - min + 1) + min)
+}
+
+const getRandomCoins = (amount) => {
+    let data = [];
+    for (let i=0; i<amount; i++) {
+        data.push({
+            symbol: [randomNumberFromInterval(65, 90), randomNumberFromInterval(65, 90), randomNumberFromInterval(65, 90), 0, 0, 0, 0, 0],
+            rate: new anchor.BN(randomNumberFromInterval(1, 20000)),
+            lastUpdated: new anchor.BN(randomNumberFromInterval(100000, 1000000)),
+            requestId: new anchor.BN(randomNumberFromInterval(100000, 1000000)),
+        })
+    }
+    return data;
+}
+
 describe('solana-anchor-std-reference', () => {
     // Configure the client to use the local cluster.
     anchor.setProvider(anchor.Provider.local("https://api.devnet.solana.com"));
     const ownAccount = anchor.web3.Keypair.fromSecretKey(new Uint8Array([240,155,255,39,108,80,168,176,56,158,251,210,223,179,250,254,112,96,83,112,220,120,86,120,169,92,56,69,223,93,59,15,146,211,238,79,76,56,128,74,21,38,9,35,21,216,164,153,174,113,31,81,222,91,134,39,196,97,117,187,73,111,164,149]));
-    const priceKeeper = anchor.web3.Keypair.generate();
+    console.log("Price Keeper:", priceKeeper.publicKey.toBase58());
 
     it('Initialize', async () => {
         const program = anchor.workspace.StdReferenceBasic;
-        const stdReferenceSymbolsAmount = 50; // Specify this line
+        const stdReferenceSymbolsAmount = 40; // Specify this line
         const priceKeeperBytes = (stdReferenceSymbolsAmount * 32) + 32 + 1 + 12;
 
         const tx = await program.rpc.initialize(
@@ -146,6 +185,7 @@ describe('solana-anchor-std-reference', () => {
                 requestId: requestId,
             });
         }
+        console.log("PriceKeeper to write:", priceKP.toBase58());
 
         const program = anchor.workspace.StdReferenceBasic;
 
@@ -175,7 +215,7 @@ describe('solana-anchor-std-reference', () => {
 
     it('Remove', async () => {
         const program = anchor.workspace.StdReferenceBasic;
-        const symbols = ["KAI", "OGN", "WRX"];
+        const symbols = ["DAI", "ATOM"];
         let data = [];
         for (let i=0; i<symbols.length; i++) {
             const symbolArray = [...new Buffer.from(symbols[i], "ascii")];
@@ -186,7 +226,7 @@ describe('solana-anchor-std-reference', () => {
             data,
             {
                 accounts: {
-                    priceKeeper: priceKP,
+                    priceKeeper: priceKeeper.publicKey,
                     authority: ownAccount.publicKey,
                 },
                 signers: [ownAccount],
@@ -198,21 +238,21 @@ describe('solana-anchor-std-reference', () => {
 
     it('Transfer', async () => {
         const program = anchor.workspace.StdReferenceBasic;
-        const result = await program.account.priceKeeper.fetch(priceKP);
+        const result = await program.account.priceKeeper.fetch(priceKeeper.publicKey);
         console.log("Current owner:", result.authority.toBase58());
         const testAccount = anchor.web3.Keypair.fromSecretKey(new Uint8Array([252,101,88,20,83,209,171,0,101,132,175,33,196,254,80,102,204,113,236,236,219,138,36,119,37,207,66,130,229,147,131,167,104,36,49,205,204,190,176,146,249,195,127,246,252,23,89,202,81,184,95,194,131,9,82,40,28,75,11,33,242,248,110,245]))
         const tx = await program.rpc.transferOwnership(
             testAccount.publicKey,
             {
                 accounts: {
-                    priceKeeper: priceKP,
+                    priceKeeper: priceKeeper.publicKey,
                     authority: ownAccount.publicKey,
                 },
                 signers: [ownAccount],
             }
         )
         console.log("Solana TX Hash:", tx);
-        const new_result = await program.account.priceKeeper.fetch(priceKP);
+        const new_result = await program.account.priceKeeper.fetch(priceKeeper.publicKey);
         console.log("New owner:", new_result.authority.toBase58());
     })
 });
