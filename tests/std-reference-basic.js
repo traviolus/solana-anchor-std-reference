@@ -33,8 +33,9 @@ const symbols = ["BAND", "ALPHA", "MATIC", "LUNA", "ANC", "MIR", "ETH", "BTC", "
     // "SUSD",
     // "RLC"];
 const dataObi = new Obi(`{symbols:[string],multiplier:u64}/{rates:[u64]}`);
-const priceKP = new anchor.web3.PublicKey("2CEyCps4YgurP4XCnr8QLQosz7fS1JdhxVfmoPdHg6HW");
+const priceKP = new anchor.web3.PublicKey("E6nkeyqPNdQPYfViRBLM6CGzDzoSmVDyLaLymCkqmQsi");
 const priceKeeper = anchor.web3.Keypair.generate();
+const result = anchor.web3.Keypair.generate();
 
 const sleep = async (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -143,26 +144,27 @@ const getRandomCoins = (amount) => {
 describe('solana-anchor-std-reference', () => {
     // Configure the client to use the local cluster.
     anchor.setProvider(anchor.Provider.local("https://api.devnet.solana.com"));
-    const ownAccount = anchor.web3.Keypair.fromSecretKey(new Uint8Array([240,155,255,39,108,80,168,176,56,158,251,210,223,179,250,254,112,96,83,112,220,120,86,120,169,92,56,69,223,93,59,15,146,211,238,79,76,56,128,74,21,38,9,35,21,216,164,153,174,113,31,81,222,91,134,39,196,97,117,187,73,111,164,149]));
     console.log("Price Keeper:", priceKeeper.publicKey.toBase58());
 
     it('Initialize', async () => {
         const program = anchor.workspace.StdReferenceBasic;
-        const stdReferenceSymbolsAmount = 40; // Specify this line
+        const stdReferenceSymbolsAmount = 250; // Specify this line
         const priceKeeperBytes = (stdReferenceSymbolsAmount * 32) + 32 + 1 + 12;
 
         const tx = await program.rpc.initialize(
             new anchor.BN(stdReferenceSymbolsAmount),
-            ownAccount.publicKey,
+            anchor.getProvider().wallet.publicKey,
             {
                 accounts: {
                     priceKeeper: priceKeeper.publicKey,
+                    queryResult: result.publicKey,
                     rent: anchor.web3.SYSVAR_RENT_PUBKEY,
                 },
                 instructions: [
                     await program.account.priceKeeper.createInstruction(priceKeeper, priceKeeperBytes),
+                    await program.account.queryResult.createInstruction(result),
                 ],
-                signers: [priceKeeper],
+                signers: [priceKeeper, result],
             }
         );
         console.log("TX hash: ", tx);
@@ -194,9 +196,8 @@ describe('solana-anchor-std-reference', () => {
             {
                 accounts: {
                     priceKeeper: priceKP,
-                    authority: ownAccount.publicKey,
+                    authority: anchor.getProvider().wallet.publicKey,
                 },
-                signers: [ownAccount],
             }
         );
 
@@ -211,6 +212,13 @@ describe('solana-anchor-std-reference', () => {
             let price = result.prices[i];
             console.log(String.fromCharCode.apply(null, price.symbol), price.rate.toNumber()/1000000, price.lastUpdated.toNumber(), price.requestId.toNumber())
         }
+    })
+
+    it('Query', async () => {
+        const program = anchor.workspace.StdReferenceBasic;
+        const resultPubKey = new anchor.web3.PublicKey("2ur4PXjtBhoMqvRdd9HiPMpqM5q27HJbUb8Lr4LDBKJG");
+        const result = await program.account.queryResult.fetch(resultPubKey);
+        console.log(String.fromCharCode.apply(null, result.symbol), result.rate.toNumber()/1000000);
     })
 
     it('Remove', async () => {
@@ -246,9 +254,8 @@ describe('solana-anchor-std-reference', () => {
             {
                 accounts: {
                     priceKeeper: priceKeeper.publicKey,
-                    authority: ownAccount.publicKey,
+                    authority: anchor.getProvider().wallet.publicKey,
                 },
-                signers: [ownAccount],
             }
         )
         console.log("Solana TX Hash:", tx);

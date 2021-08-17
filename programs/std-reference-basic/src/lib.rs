@@ -7,9 +7,12 @@ pub mod std_reference_basic {
     pub fn initialize(ctx: Context<Initialize>, size: u8, owner: Pubkey) -> ProgramResult {
         msg!("Initialize");
         let price_keeper = &mut ctx.accounts.price_keeper;
+        let query_result = &mut ctx.accounts.query_result;
         price_keeper.authority = owner;
         price_keeper.current_size = 0;
         price_keeper.prices = Price::create_empty_prices(size);
+        query_result.symbol = [0u8; 8];
+        query_result.rate = 0u64;
         Ok(())
     }
 
@@ -85,12 +88,28 @@ pub mod std_reference_basic {
         price_keeper.current_size = remain_prices.len() as u8;
         Ok(())
     }
+
+    pub fn set_result(ctx: Context<SetResult>, symbol: [u8; 8]) -> ProgramResult {
+        msg!("Set query result");
+        let price_keeper = &ctx.accounts.price_keeper;
+        let query_result = &mut ctx.accounts.query_result;
+        let rate = price_keeper.prices.iter().find(|&p| p.symbol == symbol).map_or(None, |p| Some(p.rate));
+        if rate.is_none() {
+            msg!("Symbol not found!");
+            return Err(ErrorCode::SymbolNotFound.into());
+        }
+        query_result.symbol = symbol;
+        query_result.rate = rate.unwrap();
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(init)]
     pub price_keeper: ProgramAccount<'info, PriceKeeper>,
+    #[account(init)]
+    pub query_result: ProgramAccount<'info, QueryResult>,
 }
 
 #[derive(Accounts)]
@@ -115,6 +134,13 @@ pub struct Remove<'info> {
     pub price_keeper: ProgramAccount<'info, PriceKeeper>,
     #[account(signer)]
     pub authority: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct SetResult<'info> {
+    pub price_keeper: ProgramAccount<'info, PriceKeeper>,
+    #[account(mut)]
+    pub query_result: ProgramAccount<'info, QueryResult>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
@@ -147,8 +173,16 @@ pub struct PriceKeeper {
     pub prices: Vec<Price>,
 }
 
+#[account]
+pub struct QueryResult {
+    pub symbol: [u8; 8],
+    pub rate: u64,
+}
+
 #[error]
 pub enum ErrorCode {
     #[msg("New price vector size would be larger than the maximum allowed size")]
     PricesOverflow,
+    #[msg("Specified symbol not found in the price keeper account")]
+    SymbolNotFound,
 }

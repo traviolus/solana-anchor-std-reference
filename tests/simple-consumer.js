@@ -26,7 +26,7 @@ describe('solana-anchor-simple-consumer', () => {
 
     it('Transfer', async () => {
        const program = anchor.workspace.SimpleConsumer;
-       const consumerDb = new anchor.web3.PublicKey("648D14gbzXc4CFCxMp7zqUxnUxPh9sju5MFTji5Ld3ex");
+       const consumerDb = new anchor.web3.PublicKey("6XEjLZEMg2B5vF8dioh3EvNT1xkwXtLdHrmgqfW4NT6q");
        const result = await program.account.consumerDb.fetch(consumerDb);
        console.log("Current owner:", result.authority.toBase58());
 
@@ -47,10 +47,12 @@ describe('solana-anchor-simple-consumer', () => {
 
     it('SetPrice', async () => {
         const program = anchor.workspace.SimpleConsumer;
-        const consumerDb = new anchor.web3.PublicKey("648D14gbzXc4CFCxMp7zqUxnUxPh9sju5MFTji5Ld3ex");
-        const priceKeeper = new anchor.web3.PublicKey("2CEyCps4YgurP4XCnr8QLQosz7fS1JdhxVfmoPdHg6HW");
+        const consumerDb = new anchor.web3.PublicKey("6XEjLZEMg2B5vF8dioh3EvNT1xkwXtLdHrmgqfW4NT6q");
+        const priceKeeper = new anchor.web3.PublicKey("E6nkeyqPNdQPYfViRBLM6CGzDzoSmVDyLaLymCkqmQsi");
+        const queryResult = new anchor.web3.PublicKey("2ur4PXjtBhoMqvRdd9HiPMpqM5q27HJbUb8Lr4LDBKJG");
+        const stdReferenceBasicProgram = new anchor.web3.PublicKey("5tzRFLg3xX8HKzar3irhpSsZoti4BRzmyGrAc8ncbfcr");
 
-        const raw_symbol = "WAN";
+        const raw_symbol = "BAND";
         const symbolArray = [...new Buffer.from(raw_symbol, "ascii")];
         symbolArray.push(...Array.apply(null, new Array(8-raw_symbol.length)).map(Number.prototype.valueOf,0));
 
@@ -60,6 +62,8 @@ describe('solana-anchor-simple-consumer', () => {
                 accounts: {
                     consumerDb: consumerDb,
                     authority: anchor.getProvider().wallet.publicKey,
+                    queryResult: queryResult,
+                    stdReferenceBasicProgram: stdReferenceBasicProgram,
                     priceKeeper: priceKeeper,
                 }
             }
@@ -70,7 +74,7 @@ describe('solana-anchor-simple-consumer', () => {
     it('Query', async () => {
         const program = anchor.workspace.SimpleConsumer;
         console.log(program.programId.toBase58());
-        const consumerDb = new anchor.web3.PublicKey("648D14gbzXc4CFCxMp7zqUxnUxPh9sju5MFTji5Ld3ex");
+        const consumerDb = new anchor.web3.PublicKey("6XEjLZEMg2B5vF8dioh3EvNT1xkwXtLdHrmgqfW4NT6q");
 
         const result = await program.account.consumerDb.fetch(consumerDb);
         console.log(String.fromCharCode.apply(null, result.latestSymbol), result.latestPrice.toNumber()/1000000)

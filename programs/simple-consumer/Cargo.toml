@@ -16,3 +16,4 @@ default = []
 
 [dependencies]
 anchor-lang = "0.13.0"
+std-reference-basic = { path = "../std-reference-basic", features = ["cpi"] }

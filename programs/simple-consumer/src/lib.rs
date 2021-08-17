@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use std_reference_basic::{SetResult, QueryResult, PriceKeeper};
 
 #[program]
 pub mod simple_consumer {
@@ -23,15 +24,17 @@ pub mod simple_consumer {
     pub fn set_price(ctx: Context<SetPrice>, symbol: [u8; 8]) -> ProgramResult {
         msg!("Set price");
         let consumer_db = &mut ctx.accounts.consumer_db;
-        let price_keeper = &ctx.accounts.price_keeper;
-        msg!("{:?}", price_keeper.prices);
-        let rate = price_keeper.prices.iter().find(|&p| p.symbol == symbol).map_or(None, |p| Some(p.rate));
-        if rate.is_none() {
-            msg!("Symbol not found!");
-            return Err(ErrorCode::SymbolNotFound.into());
-        }
-        consumer_db.latest_price = rate.unwrap();
-        consumer_db.latest_symbol = symbol;
+        let mut query_result = ctx.accounts.query_result.clone();
+        let cpi_program = ctx.accounts.std_reference_basic_program.clone();
+        let cpi_accounts = SetResult {
+            price_keeper: ctx.accounts.price_keeper.clone().into(),
+            query_result: ctx.accounts.query_result.clone().into(),
+        };
+        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+        std_reference_basic::cpi::set_result(cpi_ctx, symbol)?;
+        query_result.reload()?;
+        consumer_db.latest_price = query_result.rate;
+        consumer_db.latest_symbol = query_result.symbol;
         Ok(())
     }
 }
@@ -56,22 +59,10 @@ pub struct SetPrice<'info> {
     pub consumer_db: ProgramAccount<'info, ConsumerDB>,
     #[account(signer)]
     pub authority: AccountInfo<'info>,
+    #[account(mut)]
+    pub query_result: CpiAccount<'info, QueryResult>,
+    pub std_reference_basic_program: AccountInfo<'info>,
     pub price_keeper: CpiAccount<'info, PriceKeeper>,
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
-pub struct Price {
-    pub symbol: [u8; 8],
-    pub rate: u64,
-    pub last_updated: u64,
-    pub request_id: u64,
-}
-
-#[account]
-pub struct PriceKeeper {
-    pub authority: Pubkey,
-    pub current_size: u8,
-    pub prices: Vec<Price>,
 }
 
 #[account]
@@ -79,10 +70,4 @@ pub struct ConsumerDB {
     pub authority: Pubkey,
     pub latest_symbol: [u8; 8],
     pub latest_price: u64,
-}
-
-#[error]
-pub enum ErrorCode {
-    #[msg("Specified symbol not found in the price keeper account")]
-    SymbolNotFound,
 }
